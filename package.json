@@ -1,7 +1,8 @@
 {
-  "name": "raspberry-pi-configurator-www",
+  "name": "pi-config-wizard-www",
   "version": "0.1.0",
   "private": true,
+  "homepage": "./",
   "dependencies": {
     "@babel/core": "^7.16.0",
     "@emotion/react": "^11.11.4",

@@ -31,6 +31,9 @@ function App() {
   const [snackBarOpen, setSnackBarOpen] = React.useState(false);
   const [snackBarSeverity, setSnackBarSeverity] = React.useState('success');
   const [configTxt, setConfigTxt] = React.useState('');
+  const [mounted, setMounted] = React.useState(false);
+  const [i2cState, setI2CState] = React.useState(null);
+  const [spiState, setSPIState] = React.useState(null);
 
   const request = async (method, endpoint, data) => {
     let payload = {
@@ -63,6 +66,36 @@ function App() {
     setSnackBarOpen(true);
   }
 
+  const updateMounted = async () => {
+    let response = await request("GET", "mounted");
+    if ('error' in response) {
+      showSnackBar("error", "Error: " + response.error);
+      return;
+    }
+    setMounted(response.mounted);
+    if (response.mounted === true) {
+      await updateConfigTxt();
+    }
+  }
+
+  const updateI2CState = async () => {
+    let response = await request("GET", "i2c");
+    if ('error' in response) {
+      showSnackBar("error", "Error: " + response.error);
+      return;
+    }
+    setI2CState(response.enable);
+  }
+
+  const updateSPIState = async () => {
+    let response = await request("GET", "spi");
+    if ('error' in response) {
+      showSnackBar("error", "Error: " + response.error);
+      return;
+    }
+    setSPIState(response.enable);
+  }
+
   const updateConfigTxt = async () => {
     let response = await request("GET", "configTxt");
     if ('error' in response) {
@@ -70,6 +103,17 @@ function App() {
       return;
     }
     setConfigTxt(response.configTxt);
+  }
+
+  const handleMount = async () => {
+    setMounted(true);
+    await updateConfigTxt();
+  }
+
+  const init = async () => {
+    await updateMounted();
+    await updateI2CState();
+    await updateSPIState();
   }
 
   const handleConfigTxtChange = (value) => {
@@ -86,6 +130,10 @@ function App() {
     }
     showSnackBar("success", "config.txt saved");
   }
+
+  React.useEffect(() => {
+    init();
+  }, []);
 
   return (
     <Box sx={{
@@ -115,7 +163,17 @@ function App() {
         justifyContent: 'center',
         alignItems: 'center',
       }}>
-        {page === 'menu' && <Menu request={request} onEditConfigTxt={showEditConfigTxt} showSnackBar={showSnackBar} />}
+        {page === 'menu' && <Menu
+          request={request}
+          onEditConfigTxt={showEditConfigTxt}
+          showSnackBar={showSnackBar}
+          i2cState={i2cState}
+          spiState={spiState}
+          mounted={mounted}
+          onMountChange={handleMount}
+          onI2CStateChange={setI2CState}
+          onSPIStateChange={setSPIState}
+        />}
         {page === 'editConfigTxt' && <EditConfigTxt configTxt={configTxt} onChange={handleConfigTxtChange} />}
       </Box>
       <Snackbar
@@ -134,38 +192,17 @@ function App() {
 }
 
 function Menu(props) {
-  const [mounted, setMounted] = React.useState(false);
-  const [i2cState, setI2CState] = React.useState(false);
-  const [spiState, setSPIState] = React.useState(false);
+  const [mounted, setMounted] = React.useState(props.mounted);
   const [mountLoading, setMountLoading] = React.useState(false);
+  const [i2cState, setI2CState] = React.useState(props.i2cState);
   const [i2cLoading, setI2CLoading] = React.useState(false);
+  const [spiState, setSPIState] = React.useState(props.spiState);
   const [spiLoading, setSPILoading] = React.useState(false);
-
-  const updateI2CState = async () => {
-    setI2CLoading(true);
-    let response = await props.request("GET", "i2c");
-    setI2CLoading(false);
-    if ('error' in response) {
-      props.showSnackBar("error", "Error: " + response.error);
-      return;
-    }
-    setI2CState(response.enable);
-  }
-
-  const updateSPIState = async () => {
-    setSPILoading(true);
-    let response = await props.request("GET", "spi");
-    setSPILoading(false);
-    if ('error' in response) {
-      props.showSnackBar("error", "Error: " + response.error);
-      return;
-    }
-    setSPIState(response.enable);
-  }
 
   const handleMount = async () => {
     setMountLoading(true);
     let response = await props.request("POST", "mount");
+    setMountLoading(false);
     if ('error' in response) {
       if (response.error === "PERMISSION_DENIED")
         alert("Permission denied. Please disable protection mode in the settings. And restart the addon");
@@ -173,10 +210,9 @@ function Menu(props) {
         alert("Error: " + response.error);
       return;
     }
-    setMounted(!mounted);
+    setMounted(true);
     props.showSnackBar("success", "Boot partition mounted");
-    updateI2CState();
-    updateSPIState();
+    props.onMountChange(true);
   }
 
   const handleI2CChanged = async (e) => {
@@ -189,6 +225,7 @@ function Menu(props) {
       return;
     }
     setI2CState(checked);
+    props.onI2CStateChange(checked);
     props.showSnackBar("success", `I2C interfaces ${checked ? "enabled" : "disabled"}. First time enabling I2C need twice reboot to take effect`);
   }
 
@@ -202,6 +239,7 @@ function Menu(props) {
       return;
     }
     setSPIState(checked);
+    props.onSPIStateChange(checked);
     props.showSnackBar("success", `SPI interfaces ${checked ? "enabled" : "disabled"}. Reboot to take effect`);
   }
 
@@ -212,22 +250,11 @@ function Menu(props) {
     }
   }
 
-  const updateMounted = async () => {
-    let response = await props.request("GET", "mounted");
-    if ('error' in response) {
-      props.showSnackBar("error", "Error: " + response.error);
-      return;
-    }
-    setMounted(response.mounted);
-    if (response.mounted) {
-      updateI2CState();
-      updateSPIState();
-    }
-  }
-
   React.useEffect(() => {
-    updateMounted();
-  }, []);
+    setMounted(props.mounted);
+    setI2CState(props.i2cState);
+    setSPIState(props.spiState);
+  }, [props.mounted, props.i2cState, props.spiState]);
 
   return (
     <Box width={500}>
@@ -267,7 +294,6 @@ function Menu(props) {
 }
 
 function EditConfigTxt(props) {
-
   return (
     <Editor defaultLanguage="ini" value={props.configTxt} onChange={props.onChange} />
   );
